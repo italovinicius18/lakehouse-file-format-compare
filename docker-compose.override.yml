@@ -1,0 +1,105 @@
+services:
+  spark-master:
+    image: bitnami/spark:3.4.0
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_MASTER_WEBUI_PORT=8081
+    ports:
+      - "8081:8081"
+      - "7077:7077"
+    volumes:
+      - spark-data:/bitnami
+      - ./include:/usr/local/airflow/include
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+    networks:
+      - airflow
+
+  spark-worker:
+    image: bitnami/spark:3.4.0
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=3G
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./include:/usr/local/airflow/include
+      - spark-data:/bitnami
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+    depends_on:
+      - spark-master
+    networks:
+      - airflow
+    deploy:
+      mode: replicated
+      replicas: 2
+
+  # Serviço de armazenamento de objetos (MINIO)
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    networks:
+      - airflow
+    ports:
+      - "9000:9000"   # Endpoint S3
+      - "9001:9001"   # Console web
+    volumes:
+      - minio-data:/data
+
+  # Serviço para criar os buckets no MINIO (init)
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "sleep 10 &&
+       mc alias set myminio http://minio:9000 minioadmin minioadmin &&
+       mc mb myminio/bronze &&
+       mc mb myminio/silver &&
+       mc mb myminio/gold"
+    restart: "no"
+
+  # # Motor de consulta SQL (Trino)
+  # trino:
+  #   image: trinodb/trino:latest
+  #   container_name: trino
+  #   ports:
+  #     - "8082:8080"
+  #   volumes:
+  #     - ./trino/config:/etc/trino  # Configure os conectores, por exemplo, para acesso ao MINIO via conector Hive/S3
+  #   depends_on:
+  #     - minio
+
+  # # Plataforma de visualização (Apache Superset)
+  # superset:
+  #   image: apache/superset:latest
+  #   container_name: superset
+  #   environment:
+  #     - SUPERSET_ENV=production
+  #     - SUPERSET_LOAD_EXAMPLES=no
+  #   ports:
+  #     - "8088:8088"   # Acesso à interface do Superset
+  #   depends_on:
+  #     - trino
+  #   volumes:
+  #     - superset-data:/app/superset_home
+
+volumes:
+  minio-data:
+  superset-data:
+  spark-data:
