@@ -24,8 +24,8 @@ services:
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=3G
-      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=4G
+      - SPARK_WORKER_CORES=4
       - SPARK_RPC_AUTHENTICATION_ENABLED=no
       - SPARK_RPC_ENCRYPTION_ENABLED=no
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
@@ -41,7 +41,7 @@ services:
       - airflow
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 3
 
   # Serviço de armazenamento de objetos (MINIO)
   minio:
@@ -74,32 +74,91 @@ services:
        mc mb myminio/gold"
     restart: "no"
 
-  # # Motor de consulta SQL (Trino)
-  # trino:
-  #   image: trinodb/trino:latest
-  #   container_name: trino
-  #   ports:
-  #     - "8082:8080"
-  #   volumes:
-  #     - ./trino/config:/etc/trino  # Configure os conectores, por exemplo, para acesso ao MINIO via conector Hive/S3
-  #   depends_on:
-  #     - minio
+  trino-coordinator:
+    container_name: trino
+    image: trinodb/trino:latest
+    hostname: trino-coordinator
+    environment:
+      - TRINO_ENVIRONMENT=production
+    ports:
+      - 8085:8080
+    depends_on:
+      - minio-init
+    volumes:
+      - ./trino:/etc/trino
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - airflow
 
-  # # Plataforma de visualização (Apache Superset)
-  # superset:
-  #   image: apache/superset:latest
-  #   container_name: superset
-  #   environment:
-  #     - SUPERSET_ENV=production
-  #     - SUPERSET_LOAD_EXAMPLES=no
-  #   ports:
-  #     - "8088:8088"   # Acesso à interface do Superset
-  #   depends_on:
-  #     - trino
-  #   volumes:
-  #     - superset-data:/app/superset_home
+  trino-worker:
+    image: trinodb/trino:latest
+    container_name: trino-worker
+    hostname: trino-worker
+    environment:
+      - TRINO_ENVIRONMENT=production
+      - TRINO_DISCOVERY_URI=http://trino-coordinator:8080
+    depends_on:
+      - trino-coordinator
+    volumes:
+      - ./trino:/etc/trino
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - airflow
+
+  trino-init:
+    image: trinodb/trino:latest
+    entrypoint: [ "/bin/sh", "-c", "sleep 30 && trino --server trino-coordinator:8080 -f /docker-entrypoint-initdb.d/create_schemas.sql" ]
+    volumes:
+      - ./init_trino/create_schemas.sql:/docker-entrypoint-initdb.d/create_schemas.sql  
+    depends_on:
+      trino-coordinator:
+        condition: service_healthy
+      trino-worker:
+        condition: service_healthy
+    networks:
+      - airflow
+
+  mariadb:
+    container_name: mariadb
+    hostname: mariadb
+    image: mariadb:10.5.8
+    ports:
+      - 3307:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=admin
+      - MYSQL_USER=admin
+      - MYSQL_PASSWORD=admin
+      - MYSQL_DATABASE=metastore_db
+    networks:
+      - airflow
+
+  hive-metastore:
+    container_name: hive-metastore
+    hostname: hive-metastore
+    image: 'bitsondatadev/hive-metastore:latest'
+    ports:
+      - 9083:9083 # Metastore Thrift
+    volumes:
+      - ./hive/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml:ro
+    environment:
+      - METASTORE_DB_HOSTNAME=mariadb
+    depends_on:
+      - mariadb
+    networks:
+      - airflow
 
 volumes:
   minio-data:
-  superset-data:
   spark-data:
+  trino-data:
+  hive-metastore-db-data:

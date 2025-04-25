@@ -9,16 +9,16 @@ from delta import configure_spark_with_delta_pip
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
-    tags=["sisvan", "bronze", "delta"]
+    tags=["sisvan", "gold", "iceberg"]
 )
-def bigquery_to_bronze():
+def silver_to_gold():
 
     @task.pyspark(
         conn_id="spark_default",
         config_kwargs={
             # Connectors and packages: BigQuery, Delta, Hadoop AWS
             "spark.jars.packages": ",".join([
-                "com.google.cloud.spark:spark-3.5-bigquery:0.42.1",
+                # "com.google.cloud.spark:spark-3.5-bigquery:0.42.1",
                 "io.delta:delta-core_2.12:2.4.0",
                 "org.apache.hadoop:hadoop-aws:3.3.4",
                 "com.amazonaws:aws-java-sdk-bundle:1.12.0"
@@ -32,29 +32,32 @@ def bigquery_to_bronze():
             "spark.hadoop.fs.s3a.connection.ssl.enabled": "false"
         }
     )
-    def extract_and_load(spark: SparkSession, sc: SparkContext):
-        # Configure Delta on the Spark builder
+    def transform_to_gold(spark: SparkSession, sc: SparkContext):
         builder = spark.builder.appName("SisvanBigQueryToBronze") \
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
 
         spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
-        # Read SISVAN data from BigQuery
-        sisvan_df = spark.read.format('bigquery') \
-            .option("parentProject", "mdm-2025-1") \
-            .option('credentialsFile', './include/gcp/service-account.json') \
-            .option('table', 'basedosdados.br_ms_sisvan.microdados') \
-            .load()
+        # # Create sample DataFrame
+        # data = [
+        #     (2024, 1, "SP", "sample_data_1"),
+        #     (2024, 2, "RJ", "sample_data_2"),
+        #     (2024, 3, "MG", "sample_data_3")
+        # ]
 
-        # Write into Delta on MinIO bronze bucket partitioned
-        sisvan_df.write \
-            .format('delta') \
-            .mode('overwrite') \
-            .partitionBy('ano', 'mes', 'sigla_uf') \
-            .save('s3a://bronze/sisvan')
+        # columns = ["ano", "mes", "sigla_uf", "dados"]
+        # df = spark.createDataFrame(data, columns)
+        
+        # df.show()
+        
+        # df.write \
+        #   .format("delta") \
+        #   .mode("overwrite") \
+        #   .option("path", "s3a://gold/teste") \
+        #   .saveAsTable("prod_gold.teste")
 
-    extract_and_load()
+    transform_to_gold()
 
-# instantiate the DAG
-bigquery_to_bronze()
+# instancia o DAG
+silver_to_gold()
