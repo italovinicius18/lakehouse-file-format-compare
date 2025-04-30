@@ -1,5 +1,6 @@
-apache-airflow-providers-common-compat==1.2.2
-apache-airflow-providers-apache-spark==4.11.3
-pyspark==3.4.0
+# requirements.txt
+apache-airflow-providers-common-compat
+apache-airflow-providers-apache-spark
+pandas
 delta-spark
 deltalake
