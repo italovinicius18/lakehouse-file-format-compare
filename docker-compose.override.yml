@@ -1,6 +1,3 @@
-# docker-compose.override.yml
-version: '3.1'
-
 services:
 
   spark-master:
@@ -18,8 +15,6 @@ services:
     volumes:
       - spark-data:/bitnami
       - ./include:/usr/local/airflow/include
-      - ./apps:/opt/spark-apps
-      - ./data:/opt/spark-data
     networks:
       - airflow
 
@@ -37,8 +32,6 @@ services:
     volumes:
       - ./include:/usr/local/airflow/include
       - spark-data:/bitnami
-      - ./apps:/opt/spark-apps
-      - ./data:/opt/spark-data
     depends_on:
       - spark-master
     networks:
@@ -93,7 +86,7 @@ services:
     depends_on:
       - minio-init
     volumes:
-      - ./trino:/etc/trino
+      - ./config_trino:/etc/trino
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
       interval: 30s
@@ -113,7 +106,7 @@ services:
     depends_on:
       - trino-coordinator
     volumes:
-      - ./trino:/etc/trino
+      - ./config_trino:/etc/trino
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
       interval: 30s
@@ -127,7 +120,7 @@ services:
     image: trinodb/trino:latest
     entrypoint: [ "/bin/sh", "-c", "sleep 30 && trino --server trino-coordinator:8080 -f /docker-entrypoint-initdb.d/create_schemas.sql" ]
     volumes:
-      - ./init_trino/create_schemas.sql:/docker-entrypoint-initdb.d/create_schemas.sql  
+      - ./config_init_trino/create_schemas.sql:/docker-entrypoint-initdb.d/create_schemas.sql  
     depends_on:
       trino-coordinator:
         condition: service_healthy
@@ -157,7 +150,7 @@ services:
     ports:
       - 9083:9083 # Metastore Thrift
     volumes:
-      - ./hive/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml:ro
+      - ./config_hive/metastore-site.xml:/opt/apache-hive-metastore-3.0.0-bin/conf/metastore-site.xml:ro
     environment:
       - METASTORE_DB_HOSTNAME=mariadb
     depends_on:
@@ -177,17 +170,21 @@ services:
       ADMIN_PASSWORD: admin
       ADMIN_EMAIL: admin@superset.local
     volumes:
-      - ./superset_home:/app/superset_home
+      - ./config_superset/docker/requirements-local.txt:/app/docker/requirements-local.txt:ro
+      - ./config_superset:/app/superset_home
     depends_on:
       - hive-metastore
       - trino-coordinator
       - minio
     command: >
       /bin/sh -c "
+      pip install --no-cache-dir -r /app/docker/requirements-local.txt &&
       superset db upgrade &&
       superset fab create-admin --username $${ADMIN_USERNAME} --firstname Superset --lastname Admin --email $${ADMIN_EMAIL} --password $${ADMIN_PASSWORD} || true &&
       superset init &&
       superset run -h 0.0.0.0 -p 8088"
+    networks:
+      - airflow
 
 volumes:
   spark-data:

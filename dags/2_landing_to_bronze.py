@@ -62,6 +62,9 @@ def landing_to_bronze():
             "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
             "spark.sql.catalogImplementation": "hive",
             "hive.metastore.uris": "thrift://hive-metastore:9083",
+            "spark.driver.memory":   "2g",
+            "spark.executor.memory": "3g",
+            "spark.executor.cores":  "2",
         },
     )
     def extract_and_load(spark: SparkSession, sc):

@@ -76,7 +76,13 @@ You can adapt the connections and configurations in the `airflow_settings.yaml` 
 ## Getting Started
 
 1. **Install Astro CLI** for local Airflow development: follow the [official installation guide](https://www.astronomer.io/docs/cloud/stable/develop/cli-installation/) to install the Astro CLI.
-2. **Start the environment**:
+2. Setup the folder and permission for superset folder:
+   ```bash
+   mkdir -p ./config_superset
+   chown 1000:1000 ./config_superset
+   chmod 750 ./config_superset
+   ``` 
+3. **Start the environment**:
    ```bash
    astro dev start --build
    ```
