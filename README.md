@@ -12,6 +12,11 @@ This repository implements an end-to-end medallion data pipeline orchestrated by
 - **Trino**: offers a high-performance SQL engine for querying data lake tables.  
 - **Apache Superset**: enables interactive dashboarding and BI.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/caa845b8-a337-4ced-b5a9-636354b0a733">
+</p>
+
+
 ## Technologies
 
 - Apache Airflow  
