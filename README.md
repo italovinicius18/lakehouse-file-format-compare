@@ -1,25 +1,5 @@
 # Sisvan Lakehouse Pipel## Technologies
 
-- *## Prerequisites
-
-- Docker >= 20.10 and Docker Compose
-- Python 3.8+ (for Airflow dependencies)
-- [Astro CLI](https://www.astronomer.io/docs/cloud/stable/develop/cli-installation/) for local Airflow development
-- Google Cloud service account JSON (place in `include/gcp/service-account.json` with BigQuery access to the SISVAN dataset)
-- At least 8GB of RAM available for Docker containershe Airflow 2.7+**: Workflow orchestration platform
-- **Apache Spark 3.5.5**: Distributed data processing engine
-- **Delta Lake 3.1.0**: ACID transaction layer for data lakes
-- **MinIO**: S3-compatible object storage
-- **Trino**: Distributed SQL query engine
-- **Apache Superset**: Business intelligence and data visualization platform
-- **Python 3.10+**: Programming language
-- **Docker & Docker Compose**: Container platform for local deployment
-- **Hive Metastore**: Metadata catalog service
-- **MariaDB**: Database for the Hive Metastorecense: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.7+-red.svg)](https://airflow.apache.org/)
-[![Apache Spark](https://img.shields.io/badge/Apache%20Spark-3.5+-orange.svg)](https://spark.apache.org/)
-
 This repository implements an end-to-end medallion data pipeline orchestrated by **Apache Airflow** and powered by **Apache Spark**. It extracts SISVAN (Brazilian Food and Nutrition Surveillance System) microdata from BigQuery, loads it into **landing**, **bronze**, **silver**, and **gold** layers in **Delta Lake** on **MinIO**, provides analytical access via **Trino**, and supports dashboards in **Apache Superset**.
 
 ## Architecture
@@ -115,11 +95,11 @@ Key configuration files:
 ```
 
 For more detailed information about the architecture, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-```
 
 ## Getting Started
 
 1. **Install Astro CLI** for local Airflow development: follow the [official installation guide](https://www.astronomer.io/docs/cloud/stable/develop/cli-installation/) to install the Astro CLI.
+
 2. **Configure the service account**:
    ```bash
    # Create the directory if it doesn't exist
@@ -170,8 +150,6 @@ Named Docker volumes are used for data persistence:
 ### Medallion Architecture Flow
 
 This project implements a classic Medallion Architecture with four layers:
-
-![Medallion Architecture](https://raw.githubusercontent.com/user-attachments/assets/caa845b8-a337-4ced-b5a9-636354b0a733)
 
 1. **Landing Layer**: Raw data from source systems, unchanged
 2. **Bronze Layer**: Cleaned data with basic schema enforcement
