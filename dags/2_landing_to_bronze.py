@@ -62,9 +62,6 @@ def landing_to_bronze():
             "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
             "spark.sql.catalogImplementation": "hive",
             "hive.metastore.uris": "thrift://hive-metastore:9083",
-            "spark.driver.memory":   "2g",
-            "spark.executor.memory": "3g",
-            "spark.executor.cores":  "2",
         },
     )
     def extract_and_load(spark: SparkSession, sc):
@@ -73,9 +70,12 @@ def landing_to_bronze():
 
         print("✅ Dados lidos com sucesso!")
         df.printSchema()
+        print()
         df.show(5)
 
-        # Count rows
+        print("🔍 Partições atuais do DataFrame:")
+        print(df.rdd.getNumPartitions())
+
         row_count = df.count()
         print(f"📊 Total de linhas lidas inicialmente: {row_count}")
 
@@ -87,12 +87,16 @@ def landing_to_bronze():
         print("📁 Criando schema 'bronze' no metastore Hive (caso não exista)...")
         spark.sql("CREATE DATABASE IF NOT EXISTS bronze LOCATION 's3a://bronze'")
 
-        print("💾 Gravando dados em 'bronze.sisvan' com particionamento por ano, mês e UF...")
-        df.write \
-            .format("delta") \
-            .mode("overwrite") \
-            .partitionBy("ano", "mes", "sigla_uf") \
-            .saveAsTable("bronze.sisvan")
+        print("🧹 Limpando arquivos antigos da tabela bronze.sisvan...")
+        spark.sql("DROP TABLE IF EXISTS bronze.sisvan")
+        print("✅ Tabela bronze.sisvan limpa com sucesso!")
+
+        print(
+            "💾 Gravando dados em 'bronze.sisvan' com particionamento por ano, mês e UF..."
+        )
+        df.write.format("delta").mode("overwrite").partitionBy(
+            "ano", "mes", "sigla_uf"
+        ).saveAsTable("bronze.sisvan")
 
         print("✅ Tabela bronze.sisvan criada com sucesso no Hive Metastore!")
 

@@ -5,11 +5,19 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 
-ROWS = 10_000_000
+ROWS = 4_000_000
 
 config = {
-    "default": {"driver.memory": "1g", "executor.memory": "2g", "executor.cores": "2"},
-    "all": {"driver.memory": "2g", "executor.memory": "3g", "executor.cores": "2"},
+    "default": {
+        "spark.driver.memory": "1g",
+        "spark.executor.memory": "1g",
+        "spark.executor.cores": "1",
+    },
+    "all": {
+        "spark.driver.memory": "2g",
+        "spark.executor.memory": "2g",
+        "spark.executor.cores": "2",
+    },
 }
 
 config_kwargs = {
@@ -34,22 +42,26 @@ config_kwargs = {
 
 config_kwargs_default = config_kwargs.copy()
 
-config_kwargs_default["spark.driver.memory"] = config["default"]["driver.memory"]
-config_kwargs_default["spark.executor.memory"] = config["default"]["executor.memory"]
-config_kwargs_default["spark.executor.cores"] = config["default"]["executor.cores"]
+config_kwargs_default["spark.driver.memory"] = config["default"]["spark.driver.memory"]
+config_kwargs_default["spark.executor.memory"] = config["default"][
+    "spark.executor.memory"
+]
+config_kwargs_default["spark.executor.cores"] = config["default"][
+    "spark.executor.cores"
+]
 
 config_kwargs_all = config_kwargs.copy()
 
-config_kwargs_all["spark.driver.memory"] = config["all"]["driver.memory"]
-config_kwargs_all["spark.executor.memory"] = config["all"]["executor.memory"]
-config_kwargs_all["spark.executor.cores"] = config["all"]["executor.cores"]
+config_kwargs_all["spark.driver.memory"] = config["all"]["spark.driver.memory"]
+config_kwargs_all["spark.executor.memory"] = config["all"]["spark.executor.memory"]
+config_kwargs_all["spark.executor.cores"] = config["all"]["spark.executor.cores"]
 
 
 def create_data(spark: SparkSession, sc: SparkContext):
     print("🔧 Configurando Spark com Delta Lake extensions...")
 
     builder = (
-        spark.builder.appName("SisvanBigQueryToLanding")
+        spark.builder.appName("SisvanBigQueryTobronze")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config(
             "spark.sql.catalog.spark_catalog",
@@ -61,10 +73,11 @@ def create_data(spark: SparkSession, sc: SparkContext):
 
     print("✅ Spark configurado com Delta Lake.")
 
-    # Create df with 4_000_000 rows and 12 columns
+    print("🧹 Limpando arquivos antigos da tabela bronze.example...")
+    spark.sql("DROP TABLE IF EXISTS bronze.example")
+    print("✅ Tabela bronze.example limpa com sucesso!")
 
     print("🚀 Criando dataset de exemplo...")
-
     df = spark.createDataFrame(
         [
             (
@@ -100,23 +113,18 @@ def create_data(spark: SparkSession, sc: SparkContext):
     )
     print("✅ Dataset criado com sucesso.")
 
-    # Vacuum the table to remove old files
-    print("🧹 Limpando arquivos antigos da tabela landing.example...")
-    spark.sql("VACUUM landing.example")
-    print("✅ Tabela landing.example limpa com sucesso!")
-
     print("🚀 Iniciando escrita dos dados no Delta Lake...")
 
     # Create a Delta table
-    df.write.format("delta").mode("overwrite").saveAsTable("landing.example")
+    df.write.format("delta").mode("overwrite").saveAsTable("bronze.example")
 
     print("✅ Dados escritos com sucesso.")
 
 
 def process_data(spark: SparkSession, sc: SparkContext):
-    print("🚀 Iniciando leitura da camada landing (s3a://landing/example)...")
-    # Read example table from landing
-    df = spark.read.table("landing.example")
+    print("🚀 Iniciando leitura da camada silver (s3a://silver/example)...")
+    # Read example table from silver
+    df = spark.read.table("bronze.example")
     df.createOrReplaceTempView("example")
 
     df = spark.sql(
@@ -127,22 +135,21 @@ def process_data(spark: SparkSession, sc: SparkContext):
         """
     )
 
-    print("📁 Criando schema 'bronze' no metastore Hive (caso não exista)...")
-    spark.sql("CREATE DATABASE IF NOT EXISTS bronze LOCATION 's3a://bronze'")
+    print("📁 Criando schema 'silver' no metastore Hive (caso não exista)...")
+    spark.sql("CREATE DATABASE IF NOT EXISTS silver LOCATION 's3a://silver'")
 
-    # Vacuum the table to remove old files
-    print("🧹 Limpando arquivos antigos da tabela bronze.example...")
-    spark.sql("VACUUM bronze.example")
-    print("✅ Tabela bronze.example limpa com sucesso!")
+    print("🧹 Limpando arquivos antigos da tabela silver.example...")
+    spark.sql("DROP TABLE IF EXISTS silver.example")
+    print("✅ Tabela silver.example limpa com sucesso!")
 
     print(
-        "💾 Gravando dados em 'bronze.example' com particionamento por ano, mês e UF..."
+        "💾 Gravando dados em 'silver.example' com particionamento por ano, mês e UF..."
     )
     df.write.format("delta").mode("overwrite").partitionBy("col1", "col2").saveAsTable(
-        "bronze.example"
+        "silver.example"
     )
 
-    print("✅ Tabela bronze.example criada com sucesso no Hive Metastore!")
+    print("✅ Tabela silver.example criada com sucesso no Hive Metastore!")
 
 
 @dag(
@@ -161,18 +168,18 @@ def example():
         create_data(spark, sc)
 
     @task.pyspark(conn_id="spark_default", config_kwargs=config_kwargs_all)
-    def landing_to_bronze_default(spark: SparkSession, sc):
+    def bronze_to_silver_default(spark: SparkSession, sc):
         process_data(spark, sc)
 
     @task.pyspark(conn_id="spark_default", config_kwargs=config_kwargs_all)
-    def landing_to_bronze_all_resources(spark: SparkSession, sc):
+    def bronze_to_silver_all_resources(spark: SparkSession, sc):
         process_data(spark, sc)
 
     (
         default_configs()
-        >> landing_to_bronze_default()
+        >> bronze_to_silver_default()
         >> all_resources_config()
-        >> landing_to_bronze_all_resources()
+        >> bronze_to_silver_all_resources()
     )
 
 

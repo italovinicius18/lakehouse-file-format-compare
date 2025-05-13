@@ -5,6 +5,10 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 from pyspark.sql.functions import count, col
+import os
+from pathlib import Path
+import glob
+
 
 @dag(
     start_date=datetime(2024, 1, 1),
@@ -17,11 +21,13 @@ def silver_to_gold():
     @task.pyspark(
         conn_id="spark_default",
         config_kwargs={
-            "spark.jars.packages": ",".join([
-                "io.delta:delta-spark_2.12:3.1.0",
-                "org.apache.hadoop:hadoop-aws:3.3.4",
-                "com.amazonaws:aws-java-sdk-bundle:1.12.0"
-            ]),
+            "spark.jars.packages": ",".join(
+                [
+                    "io.delta:delta-spark_2.12:3.1.0",
+                    "org.apache.hadoop:hadoop-aws:3.3.4",
+                    "com.amazonaws:aws-java-sdk-bundle:1.12.0",
+                ]
+            ),
             "spark.hadoop.fs.s3a.endpoint": Variable.get("MINIO_ENDPOINT"),
             "spark.hadoop.fs.s3a.access.key": Variable.get("MINIO_ACCESS_KEY"),
             "spark.hadoop.fs.s3a.secret.key": Variable.get("MINIO_SECRET_KEY"),
@@ -39,58 +45,41 @@ def silver_to_gold():
 
         print("📥 Lendo tabela 'silver.sisvan' do Hive Metastore...")
         df = spark.read.table("silver.sisvan")
+        df.printSchema()
+        print()
+        df.show(10)
+
         df.createOrReplaceTempView("silver_sisvan")
 
         print("📁 Criando schema 'gold' no metastore Hive (caso não exista)...")
         spark.sql("CREATE DATABASE IF NOT EXISTS gold LOCATION 's3a://gold'")
 
-        # 1. Estado nutricional por faixa de vida e sexo
-        print("📊 Gerando 'gold.estado_nutricional_por_faixa_etaria'...")
-        df_estado = spark.sql("""
-            SELECT
-                fase_vida,
-                sexo,
-                estado_nutricional_adulto AS estado_nutricional,
-                COUNT(*) AS total
-            FROM silver_sisvan
-            WHERE estado_nutricional_adulto IS NOT NULL
-            GROUP BY fase_vida, sexo, estado_nutricional_adulto
-        """)
-        df_estado.write.format("delta").mode("overwrite").saveAsTable("gold.estado_nutricional_por_faixa_etaria")
+        # Loop over "./include/queries/*.sql" files
+        print("📁 Lendo arquivos SQL da pasta './include/queries/'...")
+        sql_files = glob.glob("./include/queries/*.sql")
 
-        # 2. Total de acompanhamentos mensais por UF
-        print("📊 Gerando 'gold.acompanhamentos_mensais'...")
-        df_mensal = spark.sql("""
-            SELECT
-                ano,
-                mes,
-                sigla_uf,
-                COUNT(*) AS total_acompanhamentos
-            FROM silver_sisvan
-            GROUP BY ano, mes, sigla_uf
-        """)
-        df_mensal.write.format("delta").mode("overwrite").saveAsTable("gold.acompanhamentos_mensais")
+        print(sql_files)
+        for sql_file in sql_files:
+            with open(sql_file, "r") as file:
 
-        # 3. Distribuição por sistema de origem
-        print("📊 Gerando 'gold.distribuicao_sistema_origem'...")
-        df_sistema = spark.sql("""
-            SELECT sistema_origem, COUNT(*) AS total
-            FROM silver_sisvan
-            GROUP BY sistema_origem
-        """)
-        df_sistema.write.format("delta").mode("overwrite").saveAsTable("gold.distribuicao_sistema_origem")
+                table_name = os.path.splitext(os.path.basename(sql_file))[0]
+                print(f"🧹 Limpando arquivos antigos da tabela gold.{table_name}...")
+                spark.sql(f"DROP TABLE IF EXISTS gold.{table_name}")
+                print(f"✅ Tabela gold.{table_name} limpa com sucesso!")
 
-        # 4. Total de indivíduos únicos por ano
-        print("📊 Gerando 'gold.usuarios_unicos_por_ano'...")
-        df_unicos = spark.sql("""
-            SELECT ano, COUNT(DISTINCT id_individuo) AS total_unicos
-            FROM silver_sisvan
-            GROUP BY ano
-        """)
-        df_unicos.write.format("delta").mode("overwrite").saveAsTable("gold.usuarios_unicos_por_ano")
+                sql_query = file.read()
+                print(f"📄 Executando consulta SQL: {sql_file}")
+                df = spark.sql(sql_query)
+
+                print(f"📊 Criando tabela 'gold.{table_name}'...")
+                df.write.format("delta").mode("overwrite").saveAsTable(
+                    f"gold.{table_name}"
+                )
+                print(f"✅ Tabela 'gold.{table_name}' criada com sucesso!")
 
         print("✅ Tabelas da camada gold criadas com sucesso!")
 
     aggregate_to_gold()
+
 
 silver_to_gold()
