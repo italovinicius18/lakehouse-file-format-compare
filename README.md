@@ -1,4 +1,4 @@
-# Sisvan Lakehouse Pipel## Technologies
+# Sisvan Lakehouse Pipeline
 
 This repository implements an end-to-end medallion data pipeline orchestrated by **Apache Airflow** and powered by **Apache Spark**. It extracts SISVAN (Brazilian Food and Nutrition Surveillance System) microdata from BigQuery, loads it into **landing**, **bronze**, **silver**, and **gold** layers in **Delta Lake** on **MinIO**, provides analytical access via **Trino**, and supports dashboards in **Apache Superset**.
 
