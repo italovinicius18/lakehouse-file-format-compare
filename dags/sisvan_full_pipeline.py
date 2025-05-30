@@ -10,15 +10,6 @@ from datetime import datetime
 )
 def sisvan_full_pipeline():
 
-    trigger_bronze = TriggerDagRunOperator(
-        task_id="trigger_landing_to_bronze",
-        trigger_dag_id="landing_to_bronze",
-        wait_for_completion=True,
-        poke_interval=60,
-        allowed_states=["success"],
-        failed_states=["failed"],
-    )
-
     trigger_silver = TriggerDagRunOperator(
         task_id="trigger_bronze_to_silver",
         trigger_dag_id="bronze_to_silver",
@@ -37,8 +28,7 @@ def sisvan_full_pipeline():
         failed_states=["failed"],
     )
 
-    trigger_bronze >> trigger_silver >> trigger_gold
+    trigger_silver >> trigger_gold
 
 
-# NÃO esqueça de chamar a função pra instanciar a DAG!
 sisvan_full_pipeline()
