@@ -1,15 +1,16 @@
-FROM quay.io/astronomer/astro-runtime:12.9.0
+FROM astrocrpublic.azurecr.io/runtime:3.0-4
 
 USER root
 
-# Install OpenJDK-17
-RUN apt update && \
-    apt-get install -y openjdk-17-jdk && \
-    apt-get install -y ant && \
-    apt-get clean;
+# Atualiza repositórios e instala distutils + OpenJDK17 + ant
+RUN apt-get update && \
+    apt-get install -y \
+      python3-distutils \
+      openjdk-17-jdk \
+      ant && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set JAVA_HOME
+# Define JAVA_HOME
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-RUN export JAVA_HOME
 
 USER astro

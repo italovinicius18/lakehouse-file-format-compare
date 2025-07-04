@@ -9,7 +9,7 @@ airflow:
   connections:
     - conn_id: spark_default
       conn_type: spark
-      conn_host: spark://spark-master
+      conn_host: spark://spark-master:7077
       conn_port: 7077
   variables:
     - variable_name: MINIO_ENDPOINT
