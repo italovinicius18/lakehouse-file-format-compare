@@ -44,6 +44,8 @@ def generate_bronze():
             "spark.hadoop.fs.s3a.path.style.access": "true",
             "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
             "spark.hadoop.fs.s3a.connection.ssl.enabled": "false",
+            "spark.sql.catalogImplementation": "hive",
+            "spark.hadoop.hive.metastore.uris": "thrift://hive-metastore:9083",
         },
     )
     def ingest(spark: SparkSession):

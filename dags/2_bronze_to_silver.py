@@ -24,8 +24,13 @@ def bronze_to_silver():
             # extensões Iceberg
             "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             # catálogo Silver Iceberg
-            "spark.sql.catalog.silver_catalog": "org.apache.iceberg.spark.SparkCatalog",
-            "spark.sql.catalog.silver_catalog.type": "hadoop",
+            # 1) Aponta para o mesmo implementation class
+            "spark.sql.catalog.silver_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+            # 2) Usa Hive Metastore como catálogo de metadados
+            "spark.sql.catalog.silver_catalog.type": "hive",
+            # 3) URI do seu Hive Metastore (pode vir de Variable ou de hive-site.xml)
+            "spark.sql.catalog.silver_catalog.uri": 'thrift://hive-metastore:9083',
+            # 4) (opcional) caso queira sobrepor o local padrão das tabelas
             "spark.sql.catalog.silver_catalog.warehouse": "s3a://silver",
             # S3A / MinIO
             "spark.hadoop.fs.s3a.endpoint":    Variable.get("MINIO_ENDPOINT"),
