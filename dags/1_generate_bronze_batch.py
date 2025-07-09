@@ -1,3 +1,17 @@
+"""
+Script mesclado que combina:
+1. Geração de dimensões de tempo estáticas (anos, meses, semanas, dias da semana)
+2. Geração de dados transacionais em lote (customers, contracts, transactions, etc.)
+
+Este script substitui os antigos:
+- 1_generate_time_dimensions.py 
+- 1_generate_bronze_batch.py (original)
+
+Executa a cada 10 minutos gerando:
+- Dimensões estáticas: sobrescritas a cada execução (dados de referência)
+- Dados transacionais: particionados por batch_id (dados incrementais)
+"""
+
 from airflow.decorators import dag, task
 from airflow.models import Variable
 from datetime import datetime, timedelta
@@ -79,18 +93,26 @@ TRANSACTION_TYPES = [
     {"transaction_type_id": 205, "transaction_type_name": "CARD_BLOCK", "is_financial": False},
 ]
 
-# Dimensões de tempo - geramos para 2024-2025
-TIME_DIMENSIONS = []
+# Dimensões de tempo estáticas
+MONTHS_NAMES = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+]
+
+WEEKDAYS_NAMES = [
+    "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira",
+    "Sexta-feira", "Sábado", "Domingo"
+]
 
 @dag(
-    dag_id="generate_bronze_batch",
+    dag_id="generate_bronze_complete",
     start_date=datetime(2025, 1, 1),
     schedule="*/10 * * * *",  # A cada 10 minutos
     catchup=False,
-    tags=["synthetic", "bronze", "batch", "high-volume"],
+    tags=["synthetic", "bronze", "batch", "high-volume", "dimensions"],
     max_active_runs=1,  # Evita sobreposição
 )
-def generate_bronze_batch():
+def generate_bronze_complete():
     
     @task.pyspark(
         conn_id="spark_default",
@@ -110,7 +132,7 @@ def generate_bronze_batch():
         },
     )
     def generate_batch_data(spark: SparkSession):
-        """Gera um lote grande de dados sintéticos"""
+        """Gera dimensões estáticas de tempo e um lote grande de dados sintéticos"""
         
         batch_timestamp = datetime.now()
         batch_id = batch_timestamp.strftime("%Y%m%d_%H%M%S")
@@ -126,8 +148,78 @@ def generate_bronze_batch():
               .save(path)
             print(f"✅ Gravado: {table_name} ({df.count()} registros)")
 
-        # 1. Gerar dimensões estáticas (apenas uma vez por batch)
+        def write_csv_static(df, table_name: str):
+            """Escreve CSV para tabelas estáticas sem particionamento"""
+            path = f"{BUCKET_BRONZE}/{table_name}"
+            df.write.format("csv") \
+              .mode("overwrite") \
+              .option("header", "true") \
+              .save(path)
+            print(f"✅ Gravado: {table_name} ({df.count()} registros)")
+
+        # =================================================================
+        # DIMENSÕES DE TEMPO ESTÁTICAS (geradas apenas uma vez por execução)
+        # =================================================================
+        print("⏰ Gerando dimensões de tempo estáticas...")
+        
+        # 1. Dimensão Year (2020-2030)
+        years_data = []
+        for year in range(2020, 2031):
+            years_data.append({
+                "year_id": year,
+                "action_year": year
+            })
+        
+        df_years = spark.createDataFrame(years_data) \
+            .withColumn("ingestion_timestamp", current_timestamp())
+        write_csv_static(df_years, "d_year")
+
+        # 2. Dimensão Month (1-12)
+        months_data = []
+        for month in range(1, 13):
+            months_data.append({
+                "month_id": month,
+                "action_month": month,
+                "month_name": MONTHS_NAMES[month-1]
+            })
+        
+        df_months = spark.createDataFrame(months_data) \
+            .withColumn("ingestion_timestamp", current_timestamp())
+        write_csv_static(df_months, "d_month")
+
+        # 3. Dimensão Week (1-53)
+        weeks_data = []
+        for week in range(1, 54):
+            weeks_data.append({
+                "week_id": week,
+                "action_week": week
+            })
+        
+        df_weeks = spark.createDataFrame(weeks_data) \
+            .withColumn("ingestion_timestamp", current_timestamp())
+        write_csv_static(df_weeks, "d_week")
+
+        # 4. Dimensão Weekday (1-7)
+        weekdays_data = []
+        for i, weekday_name in enumerate(WEEKDAYS_NAMES, 1):
+            weekdays_data.append({
+                "weekday_id": i,
+                "action_weekday": weekday_name
+            })
+        
+        df_weekdays = spark.createDataFrame(weekdays_data) \
+            .withColumn("ingestion_timestamp", current_timestamp())
+        write_csv_static(df_weekdays, "d_weekday")
+
+        # =================================================================
+        # DIMENSÕES TRANSACIONAIS (com particionamento por batch)
+        # =================================================================
         print("📋 Gerando dimensões estáticas...")
+        
+        # =================================================================
+        # DIMENSÕES TRANSACIONAIS (com particionamento por batch)
+        # =================================================================
+        print("📋 Gerando dimensões transacionais...")
         
         # Countries
         df_countries = spark.createDataFrame(COUNTRIES) \
@@ -154,11 +246,11 @@ def generate_bronze_batch():
             .withColumn("ingestion_timestamp", current_timestamp())
         write_csv_with_partition(df_transaction_types, "d_transaction_types")
 
-        # 2. Gerar dimensões de tempo
-        print("⏰ Gerando dimensões de tempo...")
+        # 2. Gerar dimensões de tempo dinâmicas (baseadas em timestamp)
+        print("⏰ Gerando dimensões de tempo dinâmicas...")
         time_data = []
         
-        # Gerar para os próximos 30 dias
+        # Gerar para os próximos 30 dias a partir do batch atual
         start_date = batch_timestamp.date()
         for i in range(30):
             date = start_date + timedelta(days=i)
@@ -391,14 +483,17 @@ def generate_bronze_batch():
             .withColumn("ingestion_timestamp", current_timestamp())
         write_csv_with_partition(df_transactions, "f_transactions")
 
-        print(f"🎉 Batch {batch_id} concluído!")
+        print(f"🎉 Batch completo {batch_id} concluído!")
         print(f"📊 Estatísticas do batch:")
+        print(f"   - Dimensões de tempo estáticas: Anos (11), Meses (12), Semanas (53), Dias da semana (7)")
+        print(f"   - Dimensões de tempo dinâmicas: {len(time_data) if time_data else 0}")
         print(f"   - Customers: {len(customers_data)}")
         print(f"   - Identifiers: {len(identifiers_data)}")
         print(f"   - Contracts: {len(contracts_data)}")
         print(f"   - Attributes: {len(attributes_data)}")
         print(f"   - Transactions: {len(transactions_data)}")
+        print(f"🏗️ Todas as dimensões e dados transacionais foram gerados com sucesso!")
 
     generate_batch_data()
 
-generate_bronze_batch()
+generate_bronze_complete()
