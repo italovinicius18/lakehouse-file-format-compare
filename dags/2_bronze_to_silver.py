@@ -13,7 +13,7 @@ from airflow.models import Variable
     tags=["iceberg", "upsert", "silver", "batch"],
     max_active_runs=1,
 )
-def bronze_to_silver_batch():
+def bronze_to_silver():
 
     @task.pyspark(
         conn_id="spark_default",
@@ -330,4 +330,4 @@ def bronze_to_silver_batch():
 
     upsert_iceberg_batch()
 
-bronze_to_silver_batch()
+bronze_to_silver()

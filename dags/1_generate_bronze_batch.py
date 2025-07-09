@@ -112,7 +112,7 @@ WEEKDAYS_NAMES = [
     tags=["synthetic", "bronze", "batch", "high-volume", "dimensions"],
     max_active_runs=1,  # Evita sobreposição
 )
-def generate_bronze_complete():
+def generate_bronze():
     
     @task.pyspark(
         conn_id="spark_default",
@@ -496,4 +496,4 @@ def generate_bronze_complete():
 
     generate_batch_data()
 
-generate_bronze_complete()
+generate_bronze()

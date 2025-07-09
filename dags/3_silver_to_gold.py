@@ -12,7 +12,7 @@ from airflow.models import Variable
     tags=["iceberg", "gold", "analytics", "aggregations"],
     max_active_runs=1,
 )
-def silver_to_gold_analytics():
+def silver_to_gold():
 
     @task.pyspark(
         conn_id="spark_default",
@@ -440,4 +440,4 @@ def silver_to_gold_analytics():
 
     build_gold_analytics()
 
-silver_to_gold_analytics()
+silver_to_gold()
