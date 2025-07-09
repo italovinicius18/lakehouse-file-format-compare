@@ -56,7 +56,7 @@ services:
       - "9000:9000"   # Endpoint S3
       - "9001:9001"   # Console web
     volumes:
-      - ~/minio-data:/data
+      - /mnt/e/minio-data:/data
     networks:
       - airflow
 
