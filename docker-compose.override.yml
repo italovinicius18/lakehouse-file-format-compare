@@ -119,19 +119,6 @@ services:
     networks:
       - airflow
 
-  trino-init:
-    image: trinodb/trino:latest
-    entrypoint: [ "/bin/sh", "-c", "sleep 30 && trino --server trino-coordinator:8080 -f /docker-entrypoint-initdb.d/create_schemas.sql" ]
-    volumes:
-      - ./config_init_trino/create_schemas.sql:/docker-entrypoint-initdb.d/create_schemas.sql  
-    depends_on:
-      trino-coordinator:
-        condition: service_healthy
-      trino-worker:
-        condition: service_healthy
-    networks:
-      - airflow
-
   mariadb:
     container_name: mariadb
     hostname: mariadb
